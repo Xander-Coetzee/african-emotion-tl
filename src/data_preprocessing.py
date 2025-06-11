@@ -5,6 +5,8 @@ from typing import List
 import re
 import string
 from transformers import AutoTokenizer
+import torch
+import numpy as np
 from datasets import Dataset
 
 def load_specific_language_data(data_dir: str, lang_codes: List[str]) -> pd.DataFrame:
@@ -126,4 +128,30 @@ def create_dataset(df: pd.DataFrame, model_name: str):
     eval_dataset = train_test_split['test']
     print("Dataset split into training and validation sets.")
 
-    return train_dataset, eval_dataset
+    return train_dataset, eval_dataset, emotion_columns
+
+def calculate_class_weights(df, label_columns):
+    """
+    Calculates class weights for handling class imbalance in multi-label classification.
+    The weight for a class is the ratio of negative to positive instances.
+    This is used as the `pos_weight` argument in BCEWithLogitsLoss.
+
+    Args:
+        df (pd.DataFrame): The dataframe containing the training data.
+        label_columns (list): A list of strings with the names of the label columns.
+
+    Returns:
+        torch.Tensor: A tensor containing the calculated weight for each class.
+    """
+    print("Calculating class weights for imbalance...")
+    num_samples = len(df)
+    pos_counts = df[label_columns].sum()
+    neg_counts = num_samples - pos_counts
+    pos_weights = neg_counts / pos_counts
+    
+    # Replace inf with a large number if a class has zero positive instances, though this shouldn't happen with good data.
+    pos_weights = pos_weights.replace([np.inf, -np.inf], 0).fillna(0)
+    
+    weights = torch.tensor(pos_weights.values, dtype=torch.float)
+    print("Calculated weights:", weights)
+    return weights

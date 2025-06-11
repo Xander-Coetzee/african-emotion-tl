@@ -1,8 +1,8 @@
 pandas
 numpy
 scikit-learn
-torch
-transformers
-datasets
 adapter-transformers
+datasets
+torch
+accelerate
 tqdm

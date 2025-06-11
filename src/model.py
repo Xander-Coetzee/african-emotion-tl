@@ -1,25 +1,34 @@
 # To define the different model architectures (fine-tuning, adapters).
-from transformers import AutoModelForSequenceClassification
-
+from adapters import AutoAdapterModel
+from adapters.composition import Stack
 
 def get_model(model_name: str, num_labels: int):
-    """Initializes a transformer model for sequence classification.
+    """
+    Loads a pre-trained transformer model and sets it up for adapter-based tuning.
 
-    This function leverages the Hugging Face Transformers library to load a pre-trained model.
-    It's configured for sequence classification, making it suitable for our emotion analysis task.
+    This function loads the base model, adds a new task-specific adapter for sequence
+    classification, activates it, and freezes the base model's weights. This ensures
+    that only the small adapter module is trained, which is much more efficient.
 
     Args:
-        model_name (str): The identifier of the pre-trained model to load (e.g., 'bert-base-uncased').
-        num_labels (int): The number of distinct labels in the classification task.
+        model_name (str): The identifier for the pre-trained model.
+        num_labels (int): The number of labels for the classification task.
 
     Returns:
         A transformer model instance ready for training.
     """
     # Announce which model is being loaded for clarity during execution.
     print(f"Loading model: {model_name}")
+    model = AutoAdapterModel.from_pretrained(model_name)
 
-    # Load the pre-trained model, specifying the number of labels for the classification head.
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
+    # Add a new task-specific adapter for sequence classification.
+    # We'll give it a unique name, 'emotion_classification'.
+    model.add_adapter("emotion_classification", config="pfeiffer")
 
-    # Return the initialized model.
+    # Add a classification head that matches our number of labels.
+    model.add_classification_head("emotion_classification", num_labels=num_labels)
+
+    # Set the active adapter for training.
+    model.train_adapter("emotion_classification")
+
     return model
