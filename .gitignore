@@ -1,2 +1,7 @@
 # Environments
 .venv/
+results/
+**/__pycache__/
+*.bin
+*.pt
+*.pth
