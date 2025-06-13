@@ -6,6 +6,8 @@ from torch.nn import BCEWithLogitsLoss
 import config
 import math
 from src.evaluate import compute_metrics
+import os
+import shutil
 
 
 class MultilabelTrainer(AdapterTrainer):
@@ -36,7 +38,8 @@ def train_model(model, train_dataset, eval_dataset, class_weights):
     # Configure training arguments for a more robust training and evaluation cycle.
     training_args = TrainingArguments(
         output_dir='./results',
-        num_train_epochs=10,  # Increased epochs for better convergence.
+        num_train_epochs=config.TRAINING_ARGS.get('num_train_epochs', 3), # Use epoch number from config.
+        lr_scheduler_type="cosine",  # Use a cosine learning rate scheduler.
         per_device_train_batch_size=config.TRAINING_ARGS.get('per_device_train_batch_size', 8),
         per_device_eval_batch_size=config.TRAINING_ARGS.get('per_device_eval_batch_size', 8),
         warmup_steps=config.TRAINING_ARGS.get('warmup_steps', 500),
@@ -64,3 +67,24 @@ def train_model(model, train_dataset, eval_dataset, class_weights):
     print("Starting adapter-based model training...")
     trainer.train()
     print("Model training complete.")
+
+    # --- Save the Best Model & Clean Up ---
+    # After training, the best model is loaded. We save the adapter and the head.
+    adapter_name = "emotion_classification"  # This should match the adapter name used in model.py
+    
+    # Ensure the save directory exists.
+    os.makedirs(config.SAVED_MODEL_PATH, exist_ok=True)
+    
+    # Define the full path for the saved adapter.
+    final_adapter_path = os.path.join(config.SAVED_MODEL_PATH, adapter_name)
+
+    # Save the adapter and the prediction head.
+    model.save_adapter(final_adapter_path, adapter_name)
+    model.save_head(final_adapter_path, adapter_name)
+    
+    print(f"Best adapter and head saved to {final_adapter_path}")
+
+    # Clean up the checkpoints directory.
+    print(f"Cleaning up checkpoint directory: {training_args.output_dir}")
+    shutil.rmtree(training_args.output_dir)
+    print("Cleanup complete.")

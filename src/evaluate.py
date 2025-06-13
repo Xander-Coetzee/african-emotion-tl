@@ -13,6 +13,52 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification, Trai
 import config
 from src.data_preprocessing import create_dataset, load_specific_language_data, preprocess_text
 
+def compute_metrics(eval_pred):
+    """
+    Computes and returns a dictionary of metrics for evaluation.
+
+    Args:
+        eval_pred (EvalPrediction): A tuple containing the model's predictions and the true labels.
+
+    Returns:
+        dict: A dictionary of performance metrics.
+    """
+    # Extract logits and labels from the EvalPrediction object
+    logits, labels = eval_pred
+
+    # Apply sigmoid to convert logits to probabilities
+    probs = 1 / (1 + np.exp(-logits))
+
+    # Use a 0.5 threshold to get binary predictions
+    binary_preds = (probs > 0.5).astype(int)
+
+    # --- Calculate Overall Metrics ---
+    # Calculate precision, recall, and F1-score with different averaging methods
+    p_micro, r_micro, f1_micro, _ = precision_recall_fscore_support(labels, binary_preds, average='micro')
+    p_macro, r_macro, f1_macro, _ = precision_recall_fscore_support(labels, binary_preds, average='macro', zero_division=0)
+    p_weighted, r_weighted, f1_weighted, _ = precision_recall_fscore_support(labels, binary_preds, average='weighted', zero_division=0)
+    
+    # Calculate Hamming loss and subset accuracy
+    h_loss = hamming_loss(labels, binary_preds)
+    acc = accuracy_score(labels, binary_preds)
+
+    # --- Compile Metrics into a Dictionary ---
+    metrics = {
+        'accuracy_subset': acc,
+        'hamming_loss': h_loss,
+        'f1_micro': f1_micro,
+        'f1_macro': f1_macro,
+        'f1_weighted': f1_weighted,
+        'precision_micro': p_micro,
+        'precision_macro': p_macro,
+        'precision_weighted': p_weighted,
+        'recall_micro': r_micro,
+        'recall_macro': r_macro,
+        'recall_weighted': r_weighted,
+    }
+    
+    return metrics
+
 def main():
     """Main function to run the detailed evaluation."""
     print("Starting detailed model evaluation...")
