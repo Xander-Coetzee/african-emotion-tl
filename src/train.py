@@ -88,3 +88,5 @@ def train_model(model, train_dataset, eval_dataset, class_weights):
     print(f"Cleaning up checkpoint directory: {training_args.output_dir}")
     shutil.rmtree(training_args.output_dir)
     print("Cleanup complete.")
+
+    return trainer

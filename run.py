@@ -242,7 +242,34 @@ def main():
 
         # --- Train the Model ---
         # Pass the model, datasets, and class weights to the training function.
-        train.train_model(active_model, train_dataset, eval_dataset, class_weights)
+        trainer = train.train_model(active_model, train_dataset, eval_dataset, class_weights)
+
+        # --- Final Evaluation ---
+        if trainer:
+            print("\n--- Final Model Evaluation ---")
+            print("Evaluating the best model on the validation set...")
+            final_metrics = trainer.evaluate()
+
+            print("\n--- Overall Metrics ---")
+            print(f"  Accuracy (Subset): {final_metrics.get('eval_accuracy_subset', 0):.4f}")
+            print(f"  Hamming Loss:      {final_metrics.get('eval_hamming_loss', 0):.4f}")
+            print(f"  F1-Score (Micro):    {final_metrics.get('eval_f1_micro', 0):.4f}")
+            print(f"  F1-Score (Macro):    {final_metrics.get('eval_f1_macro', 0):.4f}")
+            print(f"  F1-Score (Weighted): {final_metrics.get('eval_f1_weighted', 0):.4f}")
+            print(f"  Precision (Micro):   {final_metrics.get('eval_precision_micro', 0):.4f}")
+            print(f"  Precision (Macro):   {final_metrics.get('eval_precision_macro', 0):.4f}")
+            print(f"  Precision (Weighted):{final_metrics.get('eval_precision_weighted', 0):.4f}")
+            print(f"  Recall (Micro):      {final_metrics.get('eval_recall_micro', 0):.4f}")
+            print(f"  Recall (Macro):      {final_metrics.get('eval_recall_macro', 0):.4f}")
+            print(f"  Recall (Weighted):   {final_metrics.get('eval_recall_weighted', 0):.4f}")
+
+            print("\n--- Per-Emotion Metrics ---")
+            for label in config.LABEL_COLUMNS:
+                print(f"\nEmotion: {label}")
+                print(f"  Precision: {final_metrics.get(f'eval_precision_{label}', 0):.4f}")
+                print(f"  Recall:    {final_metrics.get(f'eval_recall_{label}', 0):.4f}")
+                print(f"  F1-Score:  {final_metrics.get(f'eval_f1_{label}', 0):.4f}")
+                print(f"  Support:   {final_metrics.get(f'eval_support_{label}', 0)}")
 
     print("\nExperiment pipeline finished.")
 

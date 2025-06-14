@@ -21,7 +21,7 @@ def compute_metrics(eval_pred):
         eval_pred (EvalPrediction): A tuple containing the model's predictions and the true labels.
 
     Returns:
-        dict: A dictionary of performance metrics.
+        dict: A dictionary of performance metrics, including per-emotion scores.
     """
     # Extract logits and labels from the EvalPrediction object
     logits, labels = eval_pred
@@ -33,16 +33,13 @@ def compute_metrics(eval_pred):
     binary_preds = (probs > 0.5).astype(int)
 
     # --- Calculate Overall Metrics ---
-    # Calculate precision, recall, and F1-score with different averaging methods
-    p_micro, r_micro, f1_micro, _ = precision_recall_fscore_support(labels, binary_preds, average='micro')
+    p_micro, r_micro, f1_micro, _ = precision_recall_fscore_support(labels, binary_preds, average='micro', zero_division=0)
     p_macro, r_macro, f1_macro, _ = precision_recall_fscore_support(labels, binary_preds, average='macro', zero_division=0)
     p_weighted, r_weighted, f1_weighted, _ = precision_recall_fscore_support(labels, binary_preds, average='weighted', zero_division=0)
-    
-    # Calculate Hamming loss and subset accuracy
     h_loss = hamming_loss(labels, binary_preds)
     acc = accuracy_score(labels, binary_preds)
 
-    # --- Compile Metrics into a Dictionary ---
+    # --- Compile Overall Metrics ---
     metrics = {
         'accuracy_subset': acc,
         'hamming_loss': h_loss,
@@ -56,7 +53,18 @@ def compute_metrics(eval_pred):
         'recall_macro': r_macro,
         'recall_weighted': r_weighted,
     }
-    
+
+    # --- Calculate and Add Per-Emotion Metrics ---
+    # Calculate precision, recall, F1, and support for each class individually
+    p_class, r_class, f1_class, s_class = precision_recall_fscore_support(labels, binary_preds, zero_division=0)
+
+    # Add per-emotion metrics to the dictionary
+    for i, label in enumerate(config.LABEL_COLUMNS):
+        metrics[f'precision_{label}'] = p_class[i]
+        metrics[f'recall_{label}'] = r_class[i]
+        metrics[f'f1_{label}'] = f1_class[i]
+        metrics[f'support_{label}'] = s_class[i]
+
     return metrics
 
 def main():
