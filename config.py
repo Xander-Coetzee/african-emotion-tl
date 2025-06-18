@@ -9,20 +9,24 @@ MODELS = {
 }
 
 # Specifies the ISO 639-1 code for the language to be processed.
-# We are focusing only on Hausa as per the project requirements.
-LANG_CODE = "hau"
+# Currently set to process English data from the BRIGHTER dataset.
+LANG_CODE = "eng"
 
 # Define the names of the emotion labels being classified.
+# Always include all 6 emotions to maintain consistent model output dimensions
 LABEL_COLUMNS = ['anger', 'disgust', 'fear', 'joy', 'sadness', 'surprise']
 
 # Training parameters
 # Define the model to use and the name for the adapter.
-MODEL_NAME = MODELS['afrixlmr']
-ADAPTER_NAME = "emotion_classification"
+MODEL_NAME = "xlm-roberta-base"  # Using base XLM-RoBERTa model
+ADAPTER_NAME = "xlmr-adapter"  # Name for saving the adapter
 
 # Data splitting parameters
 TRAIN_TEST_SPLIT_RATIO = 0.8
 SEED = 42
+
+# Tokenizer settings
+MAX_LENGTH = 128
 
 # Training parameters
 TRAINING_ARGS = {
@@ -36,7 +40,7 @@ TRAINING_ARGS = {
 
 # Data paths
 DATA_PATH = "data/"
-RAW_DATA_PATH = "data/brighter/brighter_data_train/"
+RAW_DATA_PATH = "data/raw/SemEval2025-Task11/task-dataset/semeval-2025-task11-dataset/track_a/train/"
 PROCESSED_DATA_PATH = f"{DATA_PATH}processed/"
 OUTPUT_DIR = "results/"
 MODEL_OUTPUT_DIR = "models/"

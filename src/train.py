@@ -1,30 +1,58 @@
 # To handle the model training loops.
 from adapters import AdapterTrainer
-from transformers import TrainingArguments
+from transformers import Trainer, TrainingArguments, EarlyStoppingCallback
 import torch
+import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss
 import config
 import math
 from src.evaluate import compute_metrics
+from src.visualization import plot_training_metrics
 import os
 import shutil
 
 
-class MultilabelTrainer(AdapterTrainer):
-    """Custom trainer for multi-label classification that handles class weights."""
-    def __init__(self, *args, pos_weight=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.pos_weight = pos_weight
+def get_focal_loss_trainer():
+    """
+    Create a custom trainer with focal loss for better precision/recall balance.
+    """
+    class FocalLoss(torch.nn.Module):
+        def __init__(self, alpha=1, gamma=2, reduction='mean'):
+            super().__init__()
+            self.alpha = alpha
+            self.gamma = gamma
+            self.reduction = reduction
+        
+        def forward(self, inputs, targets):
+            bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction='none')
+            pt = torch.exp(-bce_loss)
+            focal_loss = self.alpha * (1-pt)**self.gamma * bce_loss
+            
+            if self.reduction == 'mean':
+                return focal_loss.mean()
+            elif self.reduction == 'sum':
+                return focal_loss.sum()
+            return focal_loss
 
-    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
-        labels = inputs.pop("labels")
-        outputs = model(**inputs)
-        logits = outputs.get('logits')
-        # Pass the class weights to the loss function.
-        loss_fct = BCEWithLogitsLoss(pos_weight=self.pos_weight)
-        loss = loss_fct(logits.view(-1, self.model.config.num_labels),
-                        labels.view(-1, self.model.config.num_labels).float())
-        return (loss, outputs) if return_outputs else loss
+    class FocalLossTrainer(AdapterTrainer):
+        def __init__(self, *args, **kwargs):
+            # Remove pos_weight from kwargs if it's there, as we are not using it with focal loss
+            kwargs.pop('pos_weight', None)
+            super().__init__(*args, **kwargs)
+            self.focal_loss = FocalLoss(alpha=1, gamma=2)
+        
+        def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+            # Pop labels from inputs to prevent the model from calculating loss internally.
+            # We will calculate it manually using our custom focal loss.
+            labels = inputs.pop("labels")
+            outputs = model(**inputs)
+            logits = outputs.get('logits')
+
+            loss = self.focal_loss(logits, labels.float())
+
+            return (loss, outputs) if return_outputs else loss
+
+    return FocalLossTrainer
 
 def train_model(model, train_dataset, eval_dataset, class_weights):
     """
@@ -44,23 +72,28 @@ def train_model(model, train_dataset, eval_dataset, class_weights):
         per_device_eval_batch_size=config.TRAINING_ARGS.get('per_device_eval_batch_size', 8),
         warmup_steps=config.TRAINING_ARGS.get('warmup_steps', 500),
         weight_decay=config.TRAINING_ARGS.get('weight_decay', 0.01),
-        logging_dir='./logs',
+        logging_dir='./results',  # Save logs in results directory
         logging_strategy="epoch", # Log metrics at the end of each epoch.
         eval_strategy="epoch", # Evaluate at the end of each epoch.
         save_strategy="epoch", # Save a checkpoint at the end of each epoch.
+        save_total_limit=3,  # Keep the best 3 models
         load_best_model_at_end=True, # Load the best model when training is complete.
         metric_for_best_model="f1_micro", # Use f1_micro to determine the best model.
-        greater_is_better=True # Higher f1_micro is better.
+        greater_is_better=True, # Higher f1_micro is better.
+        report_to=None,  # Disable other logging to avoid conflicts
+        save_safetensors=False,  # Save as .bin for compatibility
+        save_on_each_node=True  # Ensure saving works in distributed training
     )
 
-    # Initialize the custom MultilabelTrainer with class weights.
-    trainer = MultilabelTrainer(
+    # Initialize the FocalLossTrainer.
+    # Note: We are replacing the pos_weight mechanism with Focal Loss.
+    TrainerClass = get_focal_loss_trainer()
+    trainer = TrainerClass(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics, # Pass in our metrics function.
-        pos_weight=class_weights.to(model.device) # Pass class weights to the trainer.
     )
 
     # Start the training process.
@@ -84,9 +117,18 @@ def train_model(model, train_dataset, eval_dataset, class_weights):
     
     print(f"Best adapter and head saved to {final_adapter_path}")
 
-    # Clean up the checkpoints directory.
-    print(f"Cleaning up checkpoint directory: {training_args.output_dir}")
-    shutil.rmtree(training_args.output_dir)
+    # Generate and save training metrics plots
+    print("\nGenerating training metrics plots...")
+    plot_training_metrics(
+        output_dir=os.path.join(training_args.output_dir, 'plots')
+    )
+    
+    # Clean up the checkpoints directory but keep the logs for visualization
+    print(f"\nCleaning up checkpoint directory: {training_args.output_dir}")
+    # Remove only the checkpoint directories, keep the logs
+    for item in os.listdir(training_args.output_dir):
+        if item.startswith('checkpoint-'):
+            shutil.rmtree(os.path.join(training_args.output_dir, item))
     print("Cleanup complete.")
 
     return trainer

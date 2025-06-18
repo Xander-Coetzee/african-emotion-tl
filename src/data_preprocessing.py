@@ -1,5 +1,6 @@
 # This script contains functions for loading and preprocessing the dataset.
 import pandas as pd
+import numpy as np
 import os
 from typing import List
 import re
@@ -8,6 +9,7 @@ from transformers import AutoTokenizer
 import torch
 import numpy as np
 from datasets import Dataset
+import config
 
 def load_specific_language_data(data_dir: str, lang_codes: List[str]) -> pd.DataFrame:
     """
@@ -39,6 +41,30 @@ def load_specific_language_data(data_dir: str, lang_codes: List[str]) -> pd.Data
     print(f"Total combined samples: {len(combined_df)}")
     return combined_df
 
+
+def analyze_and_clean_data(df, label_columns):
+    """
+    Analyze data quality and remove potentially noisy samples.
+    """
+    print("Analyzing data quality...")
+    
+    # Check emotion distribution
+    emotion_counts = df[label_columns].sum(axis=1)
+    print(f"Samples with 0 emotions: {(emotion_counts == 0).sum()}")
+    print(f"Samples with 1 emotion: {(emotion_counts == 1).sum()}")
+    print(f"Samples with 2 emotions: {(emotion_counts == 2).sum()}")
+    print(f"Samples with 3+ emotions: {(emotion_counts >= 3).sum()}")
+    
+    # Remove samples with too many emotions (likely noisy)
+    clean_df = df[emotion_counts <= 2].copy()  # Keep max 2 emotions
+    print(f"Removed {len(df) - len(clean_df)} potentially noisy samples")
+    
+    # Check for very short texts (likely not informative)
+    short_texts = clean_df['text'].str.len() < 10
+    clean_df = clean_df[~short_texts]
+    print(f"Removed {short_texts.sum()} very short texts")
+    
+    return clean_df
 
 def preprocess_text(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -79,55 +105,61 @@ def preprocess_text(df: pd.DataFrame) -> pd.DataFrame:
 
 def create_dataset(df: pd.DataFrame, model_name: str):
     """
-    Tokenizes text and prepares labels for multi-label classification,
-    then creates and splits a Hugging Face Dataset.
+    Cleans, tokenizes, and prepares data for multi-label classification.
+    Ensures all emotion labels from config.LABEL_COLUMNS are included in the output,
+    even if they don't exist in the input data (will be filled with zeros).
 
     Args:
-        df (pd.DataFrame): The preprocessed DataFrame.
+        df (pd.DataFrame): The input DataFrame with a 'processed_text' column.
         model_name (str): The identifier for the pre-trained model's tokenizer.
 
     Returns:
-        A tuple containing the training and validation Datasets.
+        A tuple containing the training dataset, evaluation dataset, and label columns.
     """
     # 1. Load Tokenizer
-    # The tokenizer is responsible for converting raw text into a format the model can understand.
     print("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-    # 2. Prepare Labels
-    # For multi-label classification, the model expects a list of floats for each text entry.
-    emotion_columns = ['anger', 'disgust', 'fear', 'joy', 'sadness', 'surprise']
-    labels = df[emotion_columns].values.astype(float).tolist()
-    df['labels'] = labels
-    print("Labels prepared for multi-label classification.")
-
-    # 3. Create Hugging Face Dataset from DataFrame
-    # We convert the pandas DataFrame to a Hugging Face Dataset object.
-    dataset = Dataset.from_pandas(df[['processed_text', 'labels']])
+    # 2. Clean data using the globally defined function
+    emotion_columns = config.LABEL_COLUMNS
     
-    # 4. Tokenize Text
-    # We apply the tokenizer to all texts in the 'processed_text' column.
-    # Padding ensures all sequences have the same length, and truncation cuts longer sequences.
+    # Ensure all required emotion columns exist in the DataFrame
+    for col in emotion_columns:
+        if col not in df.columns:
+            print(f"Adding missing emotion column: {col} (filled with 0s)")
+            df[col] = 0
+    
+    # Ensure we only keep the columns we want and in the correct order
+    df = df[['text', 'processed_text'] + emotion_columns].copy()
+    
+    df_clean = analyze_and_clean_data(df, emotion_columns)
+    
+    # 3. Prepare Labels - ensure all emotion columns are present and in correct order
+    labels = df_clean[emotion_columns].values.astype(float).tolist()
+    df_clean['labels'] = labels
+    print(f"Labels prepared for multi-label classification. Using {len(emotion_columns)} emotion categories.")
+
+    # 4. Create Hugging Face Dataset
+    dataset = Dataset.from_pandas(df_clean[['processed_text', 'labels']])
+    
+    # 5. Tokenize Text
     print("Tokenizing text...")
     def tokenize_function(examples):
-        return tokenizer(examples['processed_text'], padding='max_length', truncation=True, max_length=128)
+        return tokenizer(examples['processed_text'], padding='max_length', truncation=True, max_length=config.MAX_LENGTH)
 
     tokenized_dataset = dataset.map(tokenize_function, batched=True)
-    
-    # Remove the original text column as it's no longer needed after tokenization.
     tokenized_dataset = tokenized_dataset.remove_columns(['processed_text'])
-    
-    # Set the format to 'torch' to get PyTorch tensors.
     tokenized_dataset.set_format('torch', columns=['input_ids', 'attention_mask', 'labels'])
-    print("Hugging Face Dataset created.")
-
-    # 5. Split Dataset
-    # We split the dataset into training and validation sets to evaluate the model's performance.
-    train_test_split = tokenized_dataset.train_test_split(test_size=0.2)
+    
+    # 6. Split Dataset
+    # Note: test_size is the size of the TEST set, so we use 1 - TRAIN_TEST_SPLIT_RATIO
+    # to ensure training set is the larger portion
+    split_ratio = 1.0 - config.TRAIN_TEST_SPLIT_RATIO
+    train_test_split = tokenized_dataset.train_test_split(test_size=split_ratio, seed=config.SEED)
     train_dataset = train_test_split['train']
     eval_dataset = train_test_split['test']
-    print("Dataset split into training and validation sets.")
-
+    print(f"Dataset split into training ({len(train_dataset)} samples) and validation ({len(eval_dataset)} samples) sets.")
+    
     return train_dataset, eval_dataset, emotion_columns
 
 def calculate_class_weights(df, label_columns):
