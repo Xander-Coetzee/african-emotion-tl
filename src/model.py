@@ -2,6 +2,7 @@
 from adapters import AutoAdapterModel
 from adapters.composition import Stack
 
+
 def get_model(model_name: str, num_labels: int):
     """
     Loads a pre-trained transformer model and sets it up for adapter-based tuning.
@@ -22,7 +23,6 @@ def get_model(model_name: str, num_labels: int):
     model = AutoAdapterModel.from_pretrained(model_name)
 
     # Add a new task-specific adapter for sequence classification.
-    # We'll give it a unique name, 'emotion_classification'.
     model.add_adapter("emotion_classification", config="pfeiffer")
 
     # Add a classification head that matches our number of labels.

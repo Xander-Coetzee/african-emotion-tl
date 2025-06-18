@@ -35,121 +35,117 @@ print("--- SCRIPT EXECUTION STARTED ---", file=sys.stderr)
 
 def parse_arguments() -> argparse.Namespace:
     """Parse and return command line arguments.
-    
+
     Returns:
         Parsed command line arguments
     """
     parser = argparse.ArgumentParser(
-        description='Train and evaluate emotion classification models.'
+        description="Train and evaluate emotion classification models."
     )
-    
+
     # Model and language configuration
     parser.add_argument(
-        '--model', 
-        type=str, 
+        "--model",
+        type=str,
         default=config.MODEL_NAME,
-        help=f'Model name or path (default: {config.MODEL_NAME})'
+        help=f"Model name or path (default: {config.MODEL_NAME})",
     )
     parser.add_argument(
-        '--lang', 
-        type=str, 
+        "--lang",
+        type=str,
         default=config.LANG_CODE,
-        choices=['hau', 'eng'],
-        help=f'Language code (default: {config.LANG_CODE})'
+        choices=["hau", "eng"],
+        help=f"Language code (default: {config.LANG_CODE})",
     )
-    
+
     # Experiment configuration
     parser.add_argument(
-        '--output-dir', 
-        type=str, 
-        default='results',
-        help='Directory to save results (default: results/)'
+        "--output-dir",
+        type=str,
+        default="results",
+        help="Directory to save results (default: results/)",
     )
     parser.add_argument(
-        '--batch-size',
+        "--batch-size",
         type=int,
-        default=config.TRAINING_ARGS.get('per_device_train_batch_size', 8),
-        help=f'Batch size for training and evaluation (default: {config.TRAINING_ARGS.get("per_device_train_batch_size", 8)})'
+        default=config.TRAINING_ARGS.get("per_device_train_batch_size", 8),
+        help=f'Batch size for training and evaluation (default: {config.TRAINING_ARGS.get("per_device_train_batch_size", 8)})',
     )
-    
+
     # Training control
     parser.add_argument(
-        '--epochs',
+        "--epochs",
         type=int,
-        default=config.TRAINING_ARGS.get('num_train_epochs', 3),
-        help=f'Number of training epochs (default: {config.TRAINING_ARGS.get("num_train_epochs", 3)})'
+        default=config.TRAINING_ARGS.get("num_train_epochs", 3),
+        help=f'Number of training epochs (default: {config.TRAINING_ARGS.get("num_train_epochs", 3)})',
     )
     parser.add_argument(
-        '--learning-rate',
+        "--learning-rate",
         type=float,
-        default=config.TRAINING_ARGS.get('learning_rate', 2e-5),
-        help=f'Learning rate (default: {config.TRAINING_ARGS.get("learning_rate", 2e-5)})'
+        default=config.TRAINING_ARGS.get("learning_rate", 2e-5),
+        help=f'Learning rate (default: {config.TRAINING_ARGS.get("learning_rate", 2e-5)})',
     )
-    
+
     # Additional options
     parser.add_argument(
-        '--analyze',
-        action='store_true',
-        help='Run error analysis instead of training'
+        "--analyze", action="store_true", help="Run error analysis instead of training"
     )
     parser.add_argument(
-        '--seed',
-        type=int,
-        default=42,
-        help='Random seed (default: 42)'
+        "--seed", type=int, default=42, help="Random seed (default: 42)"
     )
-    
+
     return parser.parse_args()
 
 
 def save_results(
-    metrics: Dict[str, Any], 
-    output_dir: str, 
-    model_name: str, 
+    metrics: Dict[str, Any],
+    output_dir: str,
+    model_name: str,
     lang: str,
-    **additional_metadata: Dict[str, Any]
+    **additional_metadata: Dict[str, Any],
 ) -> str:
     """Save evaluation metrics and metadata to a JSON file.
-    
+
     Args:
         metrics: Dictionary of evaluation metrics
         output_dir: Directory to save results
         model_name: Name of the model used
         lang: Language code
         **additional_metadata: Additional metadata to include
-        
+
     Returns:
         Path to the saved results file
     """
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Clean up model name for filename
-    model_name_clean = model_name.replace('/', '_').replace('\\', '_')
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    
+    model_name_clean = model_name.replace("/", "_").replace("\\", "_")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     # Create filename
     filename = os.path.join(output_dir, f"{model_name_clean}_{lang}_{timestamp}.json")
-    
+
     # Prepare result data with metadata
     result_data = {
-        'experiment_metadata': {
-            'model': model_name,
-            'language': lang,
-            'timestamp': datetime.now().isoformat(),
-            'git_commit': utils.get_git_commit_hash(),
-            'command': ' '.join(sys.argv),
-            **additional_metadata
+        "experiment_metadata": {
+            "model": model_name,
+            "language": lang,
+            "timestamp": datetime.now().isoformat(),
+            "git_commit": utils.get_git_commit_hash(),
+            "command": " ".join(sys.argv),
+            **additional_metadata,
         },
-        'metrics': metrics
+        "metrics": metrics,
     }
-    
+
     # Save to file
-    with open(filename, 'w', encoding='utf-8') as f:
+    with open(filename, "w", encoding="utf-8") as f:
         json.dump(result_data, f, indent=2, ensure_ascii=False)
-    
+
     print(f"\n✅ Results saved to: {filename}")
     return filename
+
 
 # This is the main execution script for the data processing pipeline.
 # It orchestrates the loading, preprocessing, and saving of the dataset.
@@ -441,102 +437,109 @@ def run_analysis():
 
     print(f"\nSaved detailed predictions to: {output_path}")
     print(f"Saved optimal thresholds to: {threshold_path}")
-    print(f"Number of incorrect predictions: {len(review_df[~review_df['is_correct']])}")
+    print(
+        f"Number of incorrect predictions: {len(review_df[~review_df['is_correct']])}"
+    )
     return parser.parse_args()
+
 
 def save_results(metrics, output_dir, model_name, lang):
     """Save evaluation metrics to a JSON file."""
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-    
+
     # Clean up model name for filename
-    model_name_clean = model_name.split('/')[-1]
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    
+    model_name_clean = model_name.split("/")[-1]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     # Create filename
     filename = f"{output_dir}/final_metrics_{model_name_clean}_{lang}_{timestamp}.json"
-    
+
     # Add metadata
-    metrics['experiment_metadata'] = {
-        'model': model_name,
-        'language': lang,
-        'timestamp': datetime.now().isoformat(),
+    metrics["experiment_metadata"] = {
+        "model": model_name,
+        "language": lang,
+        "timestamp": datetime.now().isoformat(),
     }
-    
+
     # Save to file
-    with open(filename, 'w', encoding='utf-8') as f:
+    with open(filename, "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2, ensure_ascii=False)
-    
+
     print(f"\n✅ Results saved to: {filename}")
     return filename
 
+
 def evaluate_model(trainer, eval_dataset, label_columns):
     """Evaluate the model and return metrics.
-    
+
     Args:
         trainer: Initialized Trainer instance
         eval_dataset: Dataset for evaluation
         label_columns: List of label column names
-        
+
     Returns:
         Dictionary of evaluation metrics
     """
     print("\n--- Evaluating model ---")
-    
+
     # Get predictions and labels
     predictions = trainer.predict(eval_dataset)
     preds = np.argmax(predictions.predictions, axis=1)
     labels = predictions.label_ids
-    
+
     # Calculate metrics
     accuracy = accuracy_score(labels, preds)
     precision, recall, f1, _ = precision_recall_fscore_support(
-        labels, preds, average='weighted', zero_division=0
+        labels, preds, average="weighted", zero_division=0
     )
-    
+
     # Calculate per-class metrics
     metrics = {
-        'accuracy': accuracy,
-        'precision_weighted': precision,
-        'recall_weighted': recall,
-        'f1_weighted': f1,
-        'hamming_loss': hamming_loss(labels, preds),
+        "accuracy": accuracy,
+        "precision_weighted": precision,
+        "recall_weighted": recall,
+        "f1_weighted": f1,
+        "hamming_loss": hamming_loss(labels, preds),
     }
-    
+
     # Add per-class metrics
     precision_macro, recall_macro, f1_macro, _ = precision_recall_fscore_support(
-        labels, preds, average='macro', zero_division=0
+        labels, preds, average="macro", zero_division=0
     )
-    metrics.update({
-        'precision_macro': precision_macro,
-        'recall_macro': recall_macro,
-        'f1_macro': f1_macro,
-    })
-    
+    metrics.update(
+        {
+            "precision_macro": precision_macro,
+            "recall_macro": recall_macro,
+            "f1_macro": f1_macro,
+        }
+    )
+
     # Print metrics
     print("\n--- Evaluation Results ---")
     for metric, value in metrics.items():
         print(f"{metric}: {value:.4f}")
-    
+
     return metrics
+
 
 def main():
     """Main function to run the data processing pipeline."""
     print("=== Script started successfully ===")
-    
+
     # Parse command line arguments
     print("\n--- Parsing command line arguments ---")
     args = parse_arguments()
     print(f"Arguments parsed: {args}")
-    
+
     # Override config with command line arguments
     config.MODEL_NAME = args.model
     config.LANG_CODE = args.lang
-    config.TRAINING_ARGS['per_device_train_batch_size'] = args.batch_size
-    config.TRAINING_ARGS['per_device_eval_batch_size'] = args.batch_size
-    config.TRAINING_ARGS['num_train_epochs'] = args.epochs
-    config.TRAINING_ARGS['learning_rate'] = args.learning_rate
-    
+    config.TRAINING_ARGS["per_device_train_batch_size"] = args.batch_size
+    config.TRAINING_ARGS["per_device_eval_batch_size"] = args.batch_size
+    config.TRAINING_ARGS["num_train_epochs"] = args.epochs
+    config.TRAINING_ARGS["learning_rate"] = args.learning_rate
+
     # Set up logging
     print("\n=== Starting Experiment ===")
     print(f"Model: {config.MODEL_NAME}")
@@ -545,55 +548,50 @@ def main():
     print(f"Epochs: {args.epochs}")
     print(f"Learning rate: {args.learning_rate}")
     print(f"Output directory: {args.output_dir}")
-    
+
     # Ensure output directories exist
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
     os.makedirs(config.MODEL_OUTPUT_DIR, exist_ok=True)
     os.makedirs(args.output_dir, exist_ok=True)
-    
+
     # Set random seed for reproducibility
     utils.set_seed(args.seed)
-    
+
     # Load and preprocess data
     print("\n--- Loading and preprocessing data ---")
     try:
         # Load the dataset
         df = data_preprocessing.load_specific_language_data(
-            config.RAW_DATA_PATH, 
-            [config.LANG_CODE]
+            config.RAW_DATA_PATH, [config.LANG_CODE]
         )
-        
+
         if df.empty:
             print(f"No data found for language: {config.LANG_CODE}")
             return
-            
+
         # Preprocess text
         df = data_preprocessing.preprocess_text(df)
-        
+
         # Create dataset splits
         train_dataset, eval_dataset, label_columns = data_preprocessing.create_dataset(
-            df, 
-            config.MODEL_NAME
+            df, config.MODEL_NAME
         )
-        
+
         # Initialize model
         print("\n--- Initializing model ---")
         num_labels = len(label_columns)
         model_instance = model.get_model(config.MODEL_NAME, num_labels)
-        
+
         # Train model
         print("\n--- Starting training ---")
         trainer = train.train_model(
-            model_instance,
-            train_dataset,
-            eval_dataset,
-            class_weights=None
+            model_instance, train_dataset, eval_dataset, class_weights=None
         )
-        
+
         # Evaluate model
         print("\n--- Evaluating model ---")
         metrics = evaluate_model(trainer, eval_dataset, label_columns)
-        
+
         # Save results
         results_file = save_results(
             metrics=metrics,
@@ -601,19 +599,20 @@ def main():
             model_name=config.MODEL_NAME,
             lang=config.LANG_CODE,
             training_args={
-                'batch_size': args.batch_size,
-                'epochs': args.epochs,
-                'learning_rate': args.learning_rate,
-                'seed': args.seed
-            }
+                "batch_size": args.batch_size,
+                "epochs": args.epochs,
+                "learning_rate": args.learning_rate,
+                "seed": args.seed,
+            },
         )
         print(f"Results saved to: {results_file}")
-        
+
     except Exception as e:
         print(f"\n--- ERROR: An exception occurred during execution ---")
         print(f"Error type: {type(e).__name__}")
         print(f"Error message: {str(e)}")
         import traceback
+
         traceback.print_exc()
         return
 
@@ -625,17 +624,22 @@ def main():
             print("Analysis function finished successfully.")
         except BaseException as e:
             import traceback
+
             print(f"--- ERROR: An exception occurred during analysis ---")
             traceback.print_exc()
         return
 
     # Print final metrics if they exist
-    if 'final_metrics' in locals():
+    if "final_metrics" in locals():
         print("\n--- Final Metrics ---")
         print(f"  Accuracy:           {final_metrics.get('eval_accuracy', 0):.4f}")
         print(f"  F1 (Weighted):      {final_metrics.get('eval_f1_weighted', 0):.4f}")
-        print(f"  Precision (Weighted): {final_metrics.get('eval_precision_weighted', 0):.4f}")
-        print(f"  Recall (Weighted):   {final_metrics.get('eval_recall_weighted', 0):.4f}")
+        print(
+            f"  Precision (Weighted): {final_metrics.get('eval_precision_weighted', 0):.4f}"
+        )
+        print(
+            f"  Recall (Weighted):   {final_metrics.get('eval_recall_weighted', 0):.4f}"
+        )
 
         print("\n--- Per-Emotion Metrics ---")
         for label in config.LABEL_COLUMNS:

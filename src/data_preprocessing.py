@@ -11,6 +11,7 @@ import numpy as np
 from datasets import Dataset
 import config
 
+
 def load_specific_language_data(data_dir: str, lang_codes: List[str]) -> pd.DataFrame:
     """
     Loads and combines data for specific languages from the BRIGHTER dataset.
@@ -47,24 +48,25 @@ def analyze_and_clean_data(df, label_columns):
     Analyze data quality and remove potentially noisy samples.
     """
     print("Analyzing data quality...")
-    
-    # Check emotion distribution
+
+    # this Checks emotions distribution
     emotion_counts = df[label_columns].sum(axis=1)
     print(f"Samples with 0 emotions: {(emotion_counts == 0).sum()}")
     print(f"Samples with 1 emotion: {(emotion_counts == 1).sum()}")
     print(f"Samples with 2 emotions: {(emotion_counts == 2).sum()}")
     print(f"Samples with 3+ emotions: {(emotion_counts >= 3).sum()}")
-    
-    # Remove samples with too many emotions (likely noisy)
+
+    # Removessamples with too many emotions (likely noisy)
     clean_df = df[emotion_counts <= 2].copy()  # Keep max 2 emotions
     print(f"Removed {len(df) - len(clean_df)} potentially noisy samples")
-    
-    # Check for very short texts (likely not informative)
-    short_texts = clean_df['text'].str.len() < 10
+
+    # Checking for very short texts (likely not informative)
+    short_texts = clean_df["text"].str.len() < 10
     clean_df = clean_df[~short_texts]
     print(f"Removed {short_texts.sum()} very short texts")
-    
+
     return clean_df
+
 
 def preprocess_text(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -78,30 +80,34 @@ def preprocess_text(df: pd.DataFrame) -> pd.DataFrame:
     """
     print("Applying text preprocessing...")
 
-    # Ensure 'text' column is string type, handling potential float/NaN values
-    df['processed_text'] = df['text'].astype(str)
+    # to ensure 'text' column is string type, handling potential float/NaN values
+    df["processed_text"] = df["text"].astype(str)
 
-    # 1. Lowercase the text
-    df['processed_text'] = df['processed_text'].str.lower()
+    # 1. lowercase the text
+    df["processed_text"] = df["processed_text"].str.lower()
 
-    # 2. Remove URLs
-    df['processed_text'] = df['processed_text'].apply(lambda x: re.sub(r'http\S+|www\S+', '', x))
+    # 2.remove URLs
+    df["processed_text"] = df["processed_text"].apply(
+        lambda x: re.sub(r"http\S+|www\S+", "", x)
+    )
 
-    # 3. Remove user mentions (@)
-    df['processed_text'] = df['processed_text'].apply(lambda x: re.sub(r'@\w+', '', x))
+    # 3.remove user mentions (@)
+    df["processed_text"] = df["processed_text"].apply(lambda x: re.sub(r"@\w+", "", x))
 
     # 4. Refined punctuation removal.
-    # This regex removes characters from the standard `string.punctuation` set,
-    # which is suitable for cleaning text while preserving language-specific characters.
-    punct_to_remove = f'[{re.escape(string.punctuation)}]' 
-    df['processed_text'] = df['processed_text'].apply(lambda x: re.sub(punct_to_remove, '', x))
+    punct_to_remove = f"[{re.escape(string.punctuation)}]"
+    df["processed_text"] = df["processed_text"].apply(
+        lambda x: re.sub(punct_to_remove, "", x)
+    )
 
     # 5. Normalize whitespace.
-    # This replaces multiple whitespace characters with a single space and removes leading/trailing spaces.
-    df['processed_text'] = df['processed_text'].apply(lambda x: re.sub(r'\s+', ' ', x).strip())
+    df["processed_text"] = df["processed_text"].apply(
+        lambda x: re.sub(r"\s+", " ", x).strip()
+    )
 
     print("Text preprocessing complete.")
     return df
+
 
 def create_dataset(df: pd.DataFrame, model_name: str):
     """
@@ -122,45 +128,58 @@ def create_dataset(df: pd.DataFrame, model_name: str):
 
     # 2. Clean data using the globally defined function
     emotion_columns = config.LABEL_COLUMNS
-    
+
     # Ensure all required emotion columns exist in the DataFrame
     for col in emotion_columns:
         if col not in df.columns:
             print(f"Adding missing emotion column: {col} (filled with 0s)")
             df[col] = 0
-    
+
     # Ensure we only keep the columns we want and in the correct order
-    df = df[['text', 'processed_text'] + emotion_columns].copy()
-    
+    df = df[["text", "processed_text"] + emotion_columns].copy()
+
     df_clean = analyze_and_clean_data(df, emotion_columns)
-    
+
     # 3. Prepare Labels - ensure all emotion columns are present and in correct order
     labels = df_clean[emotion_columns].values.astype(float).tolist()
-    df_clean['labels'] = labels
-    print(f"Labels prepared for multi-label classification. Using {len(emotion_columns)} emotion categories.")
+    df_clean["labels"] = labels
+    print(
+        f"Labels prepared for multi-label classification. Using {len(emotion_columns)} emotion categories."
+    )
 
     # 4. Create Hugging Face Dataset
-    dataset = Dataset.from_pandas(df_clean[['processed_text', 'labels']])
-    
+    dataset = Dataset.from_pandas(df_clean[["processed_text", "labels"]])
+
     # 5. Tokenize Text
     print("Tokenizing text...")
+
     def tokenize_function(examples):
-        return tokenizer(examples['processed_text'], padding='max_length', truncation=True, max_length=config.MAX_LENGTH)
+        return tokenizer(
+            examples["processed_text"],
+            padding="max_length",
+            truncation=True,
+            max_length=config.MAX_LENGTH,
+        )
 
     tokenized_dataset = dataset.map(tokenize_function, batched=True)
-    tokenized_dataset = tokenized_dataset.remove_columns(['processed_text'])
-    tokenized_dataset.set_format('torch', columns=['input_ids', 'attention_mask', 'labels'])
-    
+    tokenized_dataset = tokenized_dataset.remove_columns(["processed_text"])
+    tokenized_dataset.set_format(
+        "torch", columns=["input_ids", "attention_mask", "labels"]
+    )
+
     # 6. Split Dataset
-    # Note: test_size is the size of the TEST set, so we use 1 - TRAIN_TEST_SPLIT_RATIO
-    # to ensure training set is the larger portion
     split_ratio = 1.0 - config.TRAIN_TEST_SPLIT_RATIO
-    train_test_split = tokenized_dataset.train_test_split(test_size=split_ratio, seed=config.SEED)
-    train_dataset = train_test_split['train']
-    eval_dataset = train_test_split['test']
-    print(f"Dataset split into training ({len(train_dataset)} samples) and validation ({len(eval_dataset)} samples) sets.")
-    
+    train_test_split = tokenized_dataset.train_test_split(
+        test_size=split_ratio, seed=config.SEED
+    )
+    train_dataset = train_test_split["train"]
+    eval_dataset = train_test_split["test"]
+    print(
+        f"Dataset split into training ({len(train_dataset)} samples) and validation ({len(eval_dataset)} samples) sets."
+    )
+
     return train_dataset, eval_dataset, emotion_columns
+
 
 def calculate_class_weights(df, label_columns):
     """
@@ -180,10 +199,10 @@ def calculate_class_weights(df, label_columns):
     pos_counts = df[label_columns].sum()
     neg_counts = num_samples - pos_counts
     pos_weights = neg_counts / pos_counts
-    
+
     # Replace inf with a large number if a class has zero positive instances, though this shouldn't happen with good data.
     pos_weights = pos_weights.replace([np.inf, -np.inf], 0).fillna(0)
-    
+
     weights = torch.tensor(pos_weights.values, dtype=torch.float)
     print("Calculated weights:", weights)
     return weights
